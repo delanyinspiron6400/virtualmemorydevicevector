@@ -62,11 +62,40 @@ struct VirtMem
 	void tryIncreaseReserve(size_t additional_size)
 	{
 		CUdeviceptr new_ptr;
+		additional_size = cuHelper::align(additional_size, granularity);
 		// Try first to get some addresses at the back of the current addresses
 		auto status = cuMemAddressReserve(&new_ptr, additional_size, 0ULL, ptr + reserve_size, 0ULL);
 		if(status != CUDA_SUCCESS || (new_ptr != (ptr + reserve_size)))
 		{
-			// Increase did not work, lets move 
+			// Increase did not work, check if we got a working pointer, which we now do not need
+			if(new_ptr != 0ULL)
+			{
+				HANDLE_ERROR_DAPI(cuMemAddressFree(new_ptr, additional_size));
+			}
+
+			size_t new_size = additional_size + reserve_size;
+			status = cuMemAddressReserve(&new_ptr, new_size, 0ULL, 0, 0);
+			if(status == CUDA_SUCCESS && ptr != 0ULL)
+			{
+				if(ptr != 0ULL)
+				{
+					// TODO!
+					std::cout << "Reallocation path not implemented fully yet!\n";
+					exit(-1);
+				}
+
+				ptr = new_ptr;
+				reserve_size = new_size;
+				allocs.push_back(VMAllocs{new_ptr, new_size});
+			}
+		}
+		else 
+		{
+			allocs.push_back(VMAllocs{new_ptr, additional_size});
+			if (ptr == 0ULL) {
+				ptr = new_ptr;
+			}
+			reserve_size = additional_size + reserve_size;
 		}
 	}
 
